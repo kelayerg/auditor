@@ -1,9 +1,12 @@
 #!/usr/bin/python
 # coding=utf-8
 
+__author__ = 'Alexandr Prokhorov'
+
 import shelve
 import time
 import os
+import argparse
 from auditor_cfg import *
 from functions import SendMail
 from functions import WriteLog
@@ -139,6 +142,10 @@ def getPrevDayNum():
     else:
         return time.localtime().tm_wday
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-e", "--email", default=False, help="Send Email to admin. Default False.")
+args = parser.parse_args()
+
 # Проверяем наличие обновлений скрипта и, при необходимости обновляем его
 u = Updater(__file__)
 WriteLog(u.CreateUpd(), log)
@@ -232,5 +239,6 @@ for element in sorted(sources):
 r.close()
 
 # Отправка отчёта по электронной почте
-body = open('auditor.html', 'r')
-WriteLog(SendMail(server, port, msg_from, msg_to, msg_subj, body), log)
+if args.email:
+    body = open('auditor.html', 'r')
+    WriteLog(SendMail(server, port, msg_from, msg_to, msg_subj, body), log)
