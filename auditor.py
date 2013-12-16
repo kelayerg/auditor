@@ -3,13 +3,9 @@
 
 __author__ = 'Alexandr Prokhorov'
 
-import shelve
-import time
-import os
-import argparse
+import sqlite3, argparse, os, time, shelve
 from auditor_cfg import *
-from functions import SendMail
-from functions import WriteLog
+from functions import SendMail, WriteLog
 from updater import Updater
 
 class source:
@@ -96,7 +92,7 @@ If the number of the day of the week is not passed, returns the current day of t
 class report:
     """report(path) -> html file.
 
-Creates HTML file and is waiting lists to append them to a report table."""
+Создаёт HTML файл и ожидает значений [list} для добавления в таблицу."""
     def __init__(self, path):
         self.__r = open(path, "w")
         self.__r.write('<html>\n<head>\n')
@@ -116,14 +112,35 @@ Close the file."""
             self.__r.close()
             self.__closed = True
 
+    def isHex(self, string):
+        """isHex(string) -> Boolean.
+
+Функция проверяет, является ли переданная строка шестнадцатиричным значением."""
+        for element in string:
+            if element not in '0123456789ABCDEF':
+                return False
+        return True
+
     def append(self, lst, color = 'Default'):
         """append([list], color = 'HTML code') -> None.
 
-Append a row in the report table, turning it the color passed as the second parameter (optional).
-The color should be given in the form of HTML code (such as "FFFFFF" = white color)."""
+Добавляет строку в таблицу отчёта, в качестве второго, необязательного, параметра принимает цвет,
+которым должна быть окрашена строка.
+Цвет может быть задан в виде HTML кода (например "FFFFFF" = белому цвету) или словами
+ok - зелёный,
+bad - красный,
+warning - жёлтый.
+"""
         result = '\t<tr'
         if color != 'Default':
-            result += ' bgcolor = "' + color + '"'
+            if color == 'ok':
+                result += ' bgcolor = "99FF99"'
+            elif color == 'bad':
+                result += ' bgcolor = "FFCCCC"'
+            elif color == 'warning':
+                result += ' bgcolor = "FFFF66"'
+            elif (len(color) == 6) and (self.isHex(color)):
+                result += ' bgcolor = "' + color + '"'
         result += '>\n'
         for element in lst:
             try:
@@ -142,8 +159,33 @@ def getPrevDayNum():
     else:
         return time.localtime().tm_wday
 
+def getSizeStr(size1, size2 = 0):
+    """Функция конвертирует целое значение в байтах, в строковое значение в кило, мега и гига байтах
+Если передать функции числовое значение, функция вернёт разницу между текущим объёмом файла и переданным числом"""
+    if not size1:
+        return False
+    elif abs(size1 - size2) > 2**30:
+        return ('%.2f' % (float(size1 - size2)/2**30)) + ' Gb'
+    elif abs(size1 - size2) > 2**20:
+        return ('%.2f' % (float(size1 - size2)/2**20)) + ' Mb'
+    elif abs(size1 - size2) > 2**10:
+        return ('%.2f' % (float(size1 - size2)/2**10)) + ' Kb'
+    elif abs(size1 - size2) > 0:
+        return ('%.2f' % (float(size1 - size2))) + ' byte'
+    else:
+        return '-'
+
+def getTimeStr(abstime):
+    """Функция конвертирует абсолютную дату в формат ЧЧ.ММ.ГГГГ ЧЧ:ММ"""
+    import time
+    if not abstime:
+        return False
+    else:
+        return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(abstime))
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-e", "--email", default=False, help="Send Email to admin. Default False.")
+parser.add_argument("-s", "--story", default=False, help="Unload history.")
 args = parser.parse_args()
 
 # Проверяем наличие обновлений скрипта и, при необходимости обновляем его
@@ -160,81 +202,90 @@ for element in f:
         sources[lst[0]] = {'policy':lst[1].replace(' ', ''), 'regular':lst[2].replace(' ', '')}
 f.close()
 
-# Создаём файл отчёта и добавляем в него "шапку"
+# Создаём файл отчёта
 r = report('auditor.html')
-r.append(['<b>Источник</b>', '<b>Размер</b>', '<b>Дата модификации</b>', '<b>Прирост</b>','<b>Примечания</b>'], 'CCCCCC')
 
 # Открываем файл с результатами прошлого аудита
 cash = shelve.open('auditor.dat')
 
+if not args.story:
+#  Добавляем в файл отчёта "шапку"
+    r.append(['<b>Источник</b>', '<b>Размер</b>', '<b>Дата модификации</b>', '<b>Прирост</b>','<b>Примечания</b>'], 'CCCCCC')
 # Удаляем из него ресурсы, которые отсутствуют в списке ресурсов
-for element in sorted(cash):
-    if element not in sources:
-        r.append([str(element), '', '', '', 'Удалён из списка ресурсов.'], 'FFFF66')
-        del(cash[element])
+    for element in sorted(cash):
+        if element not in sources:
+            r.append([str(element), '', '', '', 'Удалён из списка ресурсов.'], 'FFFF66')
+            del(cash[element])
 
-for element in sorted(sources):
-    # Если используется политика Default...
-    if sources[element]['policy'] == 'default':
-        s = source(element.decode('utf-8'))
-    # Если используется политика Container
-    elif sources[element]['policy'] == 'container':
-        s = source(element.decode('utf-8'), -1)
-    # Если задана иная политика...
-    else:
-        continue
-
-    # Если в параметре "регулярность" в списке ресурсов не задано создание бэкапа в прошедший день...
-    if str(getPrevDayNum()) not in sources[element]['regular']:
-        continue
-
-    # Если файл существует...
-    if s.exist:
-        result = [s.name, s.getSizeStr(), s.getTimeStr()]
-        # Если файл отсутствует в кэше, добавляем информацию о нём...
-        if element not in cash:
-            cash[element] = {'oldsize': s.size, 'size':s.size, 'result':'neutral', 'mtime':s.time, \
-                             'atime':int(time.time()), 'note':'Информация о файле добавлена в кэш.'}
-            r.append(result + ['', cash[element]['note']])
-            continue
-        # Если проверка сегодня уже проводилась успешно и файл не изменился...
-        elif (time.localtime(cash[element]['atime']).tm_wday == time.localtime().tm_wday) \
-            and ((cash[element]['result'] == 'ok') or (cash[element]['result'] == 'neutral')) \
-            and s.time == cash[element]['mtime']:
-            cash[element] = {'oldsize': cash[element]['oldsize'], 'size':s.size,'result':'ok', \
-                             'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
-            r.append(result + [s.getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
-            continue
-        # Если дата модификации файла равна дате модификации из кэша...
-        elif s.time == cash[element]['mtime']:
-            cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', \
-                             'mtime':s.time, 'atime':cash[element]['atime'], \
-                             'note':'Файл не был изменён с прошлой проверки.'}
-            r.append(result + ['', cash[element]['note']], 'FFCCCC')
-            continue
-        # Если размер контейнера изменился...
-        elif (sources[element]['policy'] == 'container') and (s.size != cash[element]['size']) \
-            and (cash[element]['size'] != 0):
-            cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', 'mtime':s.time, \
-                             'atime':int(time.time()), 'note':'Объём контейнера изменился.'}
-            r.append(result + [s.getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
-            continue
-        # Если размер файла уменьшился более чем на 50 процентов...
-        elif s.size < (cash[element]['size'] - cash[element]['size']/2):
-            cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', 'mtime':s.time, \
-                             'atime':int(time.time()), 'note':'Файл уменьшился более чем на 50 процентов.'}
-            r.append(result + [s.getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
-            continue
-        # Иначе, всё хорошо...
+    for element in sorted(sources):
+        # Если используется политика Default...
+        if sources[element]['policy'] == 'default':
+            s = source(element.decode('utf-8'))
+        # Если используется политика Container
+        elif sources[element]['policy'] == 'container':
+            s = source(element.decode('utf-8'), -1)
+        # Если задана иная политика...
         else:
-            cash[element] = {'oldsize': cash[element]['size'], 'size':s.size,'result':'ok', \
-                             'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
-            r.append(result + [s.getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
             continue
-    else:
-        cash[element] = {'oldsize': '', 'size':0, 'result':'bad', 'mtime':'', \
-                         'atime':int(time.time()), 'note':'Файл не доступен.'}
-        r.append([s.name, '', '', '', cash[element]['note']], 'FFCCCC')
+
+        # Если в параметре "регулярность" в списке ресурсов не задано создание бэкапа в прошедший день...
+        if str(getPrevDayNum()) not in sources[element]['regular']:
+            continue
+
+        # Если файл существует...
+        if s.exist:
+            result = [s.name, s.getSizeStr(), s.getTimeStr()]
+            # Если файл отсутствует в кэше, добавляем информацию о нём...
+            if element not in cash:
+                cash[element] = {'oldsize': s.size, 'size':s.size, 'result':'neutral', 'mtime':s.time, \
+                                 'atime':int(time.time()), 'note':'Информация о файле добавлена в кэш.'}
+                r.append(result + ['', cash[element]['note']])
+                continue
+            # Если проверка сегодня уже проводилась успешно и файл не изменился...
+            elif (time.localtime(cash[element]['atime']).tm_wday == time.localtime().tm_wday) \
+                and ((cash[element]['result'] == 'ok') or (cash[element]['result'] == 'neutral')) \
+                and s.time == cash[element]['mtime']:
+                cash[element] = {'oldsize': cash[element]['oldsize'], 'size':s.size,'result':'ok', \
+                                 'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
+                r.append(result + [s.getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
+                continue
+            # Если дата модификации файла равна дате модификации из кэша...
+            elif s.time == cash[element]['mtime']:
+                cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', \
+                                 'mtime':s.time, 'atime':cash[element]['atime'], \
+                                 'note':'Файл не был изменён с прошлой проверки.'}
+                r.append(result + ['', cash[element]['note']], 'FFCCCC')
+                continue
+            # Если размер контейнера изменился...
+            elif (sources[element]['policy'] == 'container') and (s.size != cash[element]['size']) \
+                and (cash[element]['size'] != 0):
+                cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', 'mtime':s.time, \
+                                 'atime':int(time.time()), 'note':'Объём контейнера изменился.'}
+                r.append(result + [s.getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
+                continue
+            # Если размер файла уменьшился более чем на 50 процентов...
+            elif s.size < (cash[element]['size'] - cash[element]['size']/2):
+                cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', 'mtime':s.time, \
+                                 'atime':int(time.time()), 'note':'Файл уменьшился более чем на 50 процентов.'}
+                r.append(result + [s.getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
+                continue
+            # Иначе, всё хорошо...
+            else:
+                cash[element] = {'oldsize': cash[element]['size'], 'size':s.size,'result':'ok', \
+                                 'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
+                r.append(result + [s.getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
+                continue
+        else:
+            cash[element] = {'oldsize': '', 'size':0, 'result':'bad', 'mtime':'', \
+                             'atime':int(time.time()), 'note':'Файл не доступен.'}
+            r.append([s.name, '', '', '', cash[element]['note']], 'FFCCCC')
+else:
+#  Добавляем в файл отчёта "шапку"
+    r.append(['<b>Источник</b>', '<b>Размер</b>', '<b>Дата модификации</b>', '<b>Примечания</b>'], 'CCCCCC')
+
+    for element in sorted(cash):
+        r.append([element, getSizeStr(cash[element]['size']), getTimeStr(cash[element]['mtime']), \
+                  cash[element]['note']], cash[element]['result'])
 
 r.close()
 
