@@ -155,6 +155,13 @@ def getTimeStr(abstime):
     else:
         return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(abstime))
 
+def hideFalse(param):
+    """Функция возвращает переданное ей значение если оно не False, в противном случае возвращает пустую строку."""
+    if not param:
+        return ''
+    else:
+        return param
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-e", "--email", default=send_mail_default, help="Send Email to admin. Configured in \
                     'auditor_cfg.py'")
@@ -257,7 +264,7 @@ else:
     r.append(['<b>Источник</b>', '<b>Размер</b>', '<b>Дата модификации</b>', '<b>Примечания</b>'], 'CCCCCC')
 
     for element in sorted(cash):
-        r.append([element, getSizeStr(cash[element]['size']), getTimeStr(cash[element]['mtime']), \
+        r.append([element, hideFalse(getSizeStr(cash[element]['size'])), hideFalse(getTimeStr(cash[element]['mtime'])), \
                   cash[element]['note']], cash[element]['result'])
 
 r.close()
