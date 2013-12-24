@@ -3,7 +3,7 @@
 
 __author__ = 'Alexandr Prokhorov'
 
-import sqlite3, argparse, os, time, shelve
+import argparse, os, time, shelve
 from auditor_cfg import *
 from functions import SendMail, WriteLog
 from updater import Updater
@@ -20,34 +20,6 @@ class source:
             self.exist = False
             self.size = False
             self.time = False
-
-    def getSizeStr(self, size = 0):
-        """Функция конвертирует целое значение в байтах, в строковое значение в кило, мега и гига байтах
-Если передать функции числовое значение, функция вернёт разницу между текущим объёмом файла и переданным числом"""
-        if not self.size:
-            return False
-        elif abs(self.size - size) > 2**30:
-            return ('%.2f' % (float(self.size - size)/2**30)) + ' Gb'
-        elif abs(self.size - size) > 2**20:
-            return ('%.2f' % (float(self.size - size)/2**20)) + ' Mb'
-        elif abs(self.size - size) > 2**10:
-            return ('%.2f' % (float(self.size - size)/2**10)) + ' Kb'
-        elif abs(self.size - size) > 0:
-            return ('%.2f' % (float(self.size - size))) + ' byte'
-        else:
-            return '-'
-
-    def getTimeStr(self):
-        """Функция конвертирует абсолютную дату в формат ЧЧ.ММ.ГГГГ ЧЧ:ММ"""
-        import time
-        if not self.time:
-            return False
-        else:
-            return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(self.time))
-
-    def __str__(self):
-        return 'Source - "%s"\nSource size = "%s"\nModify Time = "%s"' % \
-              (self.name, self.getSizeStr(), self.getTimeStr())
 
     def prepareName(self, source_name, offset = 0):
         """prepareName(str, int) -> String - source name.
@@ -234,7 +206,7 @@ if not args.story:
 
         # Если файл существует...
         if s.exist:
-            result = [s.name, s.getSizeStr(), s.getTimeStr()]
+            result = [s.name, getSizeStr(s.size), getTimeStr(s.time)]
             # Если файл отсутствует в кэше, добавляем информацию о нём...
             if element not in cash:
                 cash[element] = {'oldsize': s.size, 'size':s.size, 'result':'neutral', 'mtime':s.time, \
@@ -247,7 +219,7 @@ if not args.story:
                 and s.time == cash[element]['mtime']:
                 cash[element] = {'oldsize': cash[element]['oldsize'], 'size':s.size,'result':'ok', \
                                  'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
-                r.append(result + [s.getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
+                r.append(result + [getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
                 continue
             # Если дата модификации файла равна дате модификации из кэша...
             elif s.time == cash[element]['mtime']:
@@ -261,19 +233,19 @@ if not args.story:
                 and (cash[element]['size'] != 0):
                 cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', 'mtime':s.time, \
                                  'atime':int(time.time()), 'note':'Объём контейнера изменился.'}
-                r.append(result + [s.getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
+                r.append(result + [getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
                 continue
             # Если размер файла уменьшился более чем на 50 процентов...
             elif s.size < (cash[element]['size'] - cash[element]['size']/2):
                 cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', 'mtime':s.time, \
                                  'atime':int(time.time()), 'note':'Файл уменьшился более чем на 50 процентов.'}
-                r.append(result + [s.getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
+                r.append(result + [getSizeStr(int(cash[element]['oldsize'])), cash[element]['note']], 'FFCCCC')
                 continue
             # Иначе, всё хорошо...
             else:
                 cash[element] = {'oldsize': cash[element]['size'], 'size':s.size,'result':'ok', \
                                  'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
-                r.append(result + [s.getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
+                r.append(result + [getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
                 continue
         else:
             cash[element] = {'oldsize': '', 'size':0, 'result':'bad', 'mtime':'', \
