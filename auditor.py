@@ -156,7 +156,8 @@ def getTimeStr(abstime):
         return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(abstime))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-e", "--email", default=False, help="Send Email to admin. Default False.")
+parser.add_argument("-e", "--email", default=send_mail_default, help="Send Email to admin. Configured in \
+                    'auditor_cfg.py'")
 parser.add_argument("-s", "--story", default=False, help="Unload history.")
 args = parser.parse_args()
 
@@ -221,10 +222,10 @@ if not args.story:
                                  'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
                 r.append(result + [getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
                 continue
-            # Если дата модификации файла равна дате модификации из кэша...
-            elif s.time == cash[element]['mtime']:
+            # Если дата модификации файла меньшу или равна дате модификации из кэша...
+            elif s.time <= cash[element]['mtime']:
                 cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', \
-                                 'mtime':s.time, 'atime':cash[element]['atime'], \
+                                 'mtime':cash[element]['mtime'], 'atime':cash[element]['atime'], \
                                  'note':'Файл не был изменён с прошлой проверки.'}
                 r.append(result + ['', cash[element]['note']], 'FFCCCC')
                 continue
