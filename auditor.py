@@ -159,12 +159,9 @@ def hideFalse(param):
     """Функция возвращает переданное ей значение если оно не False, в противном случае возвращает пустую строку."""
     if not param:
         return ''
-    else:
-        return param
+    return param
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-e", "--email", default=send_mail_default, help="Send Email to admin. Configured in \
-                    'auditor_cfg.py'")
 parser.add_argument("-s", "--story", default=False, help="Unload history.")
 args = parser.parse_args()
 
@@ -259,6 +256,13 @@ if not args.story:
             cash[element] = {'oldsize': '', 'size':0, 'result':'bad', 'mtime':'', \
                              'atime':int(time.time()), 'note':'Файл не доступен.'}
             r.append([s.name, '', '', '', cash[element]['note']], 'FFCCCC')
+        r.close()
+
+        # Отправка отчёта по электронной почте
+        if send_mail_default:
+            body = open('auditor.html', 'r')
+            WriteLog(SendMail(server, port, msg_from, msg_to, msg_subj, body), log)
+
 else:
 #  Добавляем в файл отчёта "шапку"
     r.append(['<b>Источник</b>', '<b>Размер</b>', '<b>Дата модификации</b>', '<b>Примечания</b>'], 'CCCCCC')
@@ -266,10 +270,4 @@ else:
     for element in sorted(cash):
         r.append([element, hideFalse(getSizeStr(cash[element]['size'])), hideFalse(getTimeStr(cash[element]['mtime'])), \
                   cash[element]['note']], cash[element]['result'])
-
-r.close()
-
-# Отправка отчёта по электронной почте
-if args.email:
-    body = open('auditor.html', 'r')
-    WriteLog(SendMail(server, port, msg_from, msg_to, msg_subj, body), log)
+    r.close()
