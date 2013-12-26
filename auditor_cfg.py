@@ -6,4 +6,4 @@ msg_subj = 'Отчёт о резульатах задач резервирова
 server = 'smtp.company.ru'
 port = 25
 log = 'auditor.log'
-send_mail_default = False
+send_mail_default = True
