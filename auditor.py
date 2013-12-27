@@ -256,12 +256,13 @@ if not args.story:
             cash[element] = {'oldsize': '', 'size':0, 'result':'bad', 'mtime':'', \
                              'atime':int(time.time()), 'note':'Файл не доступен.'}
             r.append([s.name, '', '', '', cash[element]['note']], 'FFCCCC')
-        r.close()
 
-        # Отправка отчёта по электронной почте
-        if send_mail_default:
-            body = open('auditor.html', 'r')
-            WriteLog(SendMail(server, port, msg_from, msg_to, msg_subj, body), log)
+    r.close()
+
+    # Отправка отчёта по электронной почте
+    if send_mail_default:
+        body = open('auditor.html', 'r')
+        WriteLog(SendMail(server, port, msg_from, msg_to, msg_subj, body), log)
 
 else:
 #  Добавляем в файл отчёта "шапку"
