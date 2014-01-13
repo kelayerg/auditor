@@ -226,8 +226,8 @@ if not args.story:
                                  'mtime':s.time, 'atime':int(time.time()), 'note':'OK'}
                 r.append(result + [getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
                 continue
-            # Если дата модификации файла меньшу или равна дате модификации из кэша...
-            elif s.time <= cash[element]['mtime']:
+            # Если дата модификации файла меньше или равна дате модификации из кэша...
+            elif int(s.time) <= int(cash[element]['mtime']):
                 cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', \
                                  'mtime':cash[element]['mtime'], 'atime':cash[element]['atime'], \
                                  'note':'Файл не был изменён с прошлой проверки.'}
