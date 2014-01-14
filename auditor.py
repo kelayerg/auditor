@@ -161,6 +161,15 @@ def hideFalse(param):
         return ''
     return param
 
+def ToInt(param):
+    """Функция возвращает целое значение, в случе если ей передано целое число или число с плавающей точкой.
+В случае передачи функции нечислового значения, будет возвращён ноль."""
+    if type(param) == float:
+        return int(param)
+    if type(param) == int:
+        return param
+    return 0
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--story", default=False, help="Unload history.")
 args = parser.parse_args()
@@ -227,7 +236,7 @@ if not args.story:
                 r.append(result + [getSizeStr(cash[element]['oldsize']), cash[element]['note']], '99FF99')
                 continue
             # Если дата модификации файла меньше или равна дате модификации из кэша...
-            elif int(s.time) <= int(cash[element]['mtime']):
+            elif ToInt(s.time) <= ToInt(cash[element]['mtime']):
                 cash[element] = {'oldsize': cash[element]['size'], 'size':s.size, 'result':'bad', \
                                  'mtime':cash[element]['mtime'], 'atime':cash[element]['atime'], \
                                  'note':'Файл не был изменён с прошлой проверки.'}
